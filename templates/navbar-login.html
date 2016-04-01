@@ -1,0 +1,12 @@
+{{define "navbar-login"}}
+<ul class="nav navbar-nav navbar-right">
+  {{if .Session.IsLogged}}
+  <li><a href="#">Logout</a></li>
+  {{else}}
+  <li>
+    <p class="navbar-text">Signed in as Ajeje Brazorv</p>
+  </li>
+  <li><a href="#">Login</a></li>
+  {{end}}
+</ul>
+{{end}}

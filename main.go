@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -20,13 +22,36 @@ var clientID = flag.String("clientId", "", "The client_id registered on dev.mend
 var clientSecret = flag.String("clientSecret", "", "The client_secret registered on dev.mendeley.com")
 var redirectURI = flag.String("redirectUri", "", "The client_secret registered on dev.mendeley.com")
 
-// Session (in-memory)
-var sessionMap = map[uuid.UUID]*session{}
+// Page templates
+var templates *template.Template
+
+func init() {
+	templates = template.Must(template.ParseFiles(
+		"templates/layout.html",
+		"templates/navbar.html",
+		"templates/navbar-login.html",
+	))
+
+	log.Println("Templates parse successful", templates.DefinedTemplates())
+}
 
 func main() {
 	log.Println("Starting up...")
 	flag.Parse()
+	validateArgs()
 
+	r := mux.NewRouter()
+
+	r.HandleFunc("/", homeHandler).Methods("GET")
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir("static")))
+	r.HandleFunc("/login", loginCallbackHandler)
+
+	log.Println("Started with PID", os.Getpid())
+
+	log.Fatal(http.ListenAndServe(":8080", r))
+}
+
+func validateArgs() {
 	if *clientID == "" {
 		log.Fatalln("--clientId must be specified")
 	}
@@ -36,14 +61,6 @@ func main() {
 	if *redirectURI == "" {
 		log.Fatalln("--redirectUri must be specified")
 	}
-
-	r := mux.NewRouter()
-	r.HandleFunc("/", homeHandler).Methods("GET")
-	r.HandleFunc("/login", loginCallbackHandler)
-
-	log.Fatal(http.ListenAndServe(":8080", r))
-
-	log.Println("Shutting down...")
 }
 
 func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
@@ -125,40 +142,19 @@ func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, "/", http.StatusFound)
 }
 
-func homeHandler(w http.ResponseWriter, req *http.Request) {
-	log.Printf("GET: %v", req.URL)
+func homeHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("GET: %v", r.URL)
 
-	sessCookie, err := req.Cookie("_session")
+	s, err := retrieveOrCreateSession(w, r)
 	if err != nil {
-		// initiate login
-		log.Print("Not logged request, redirect to Mendeley login")
-		beginAuthorizationCodeFlow(w, req)
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	sessCookieVal, _ := url.QueryUnescape(sessCookie.Value)
-	sessionID, err := uuid.FromString(sessCookieVal)
-	if err != nil {
-		log.Print("Invalid session id, redirect to Mendeley login")
-		beginAuthorizationCodeFlow(w, req)
-		return
-	}
-
-	s, ok := sessionMap[sessionID]
-	if !ok {
-		log.Print("Session doesn't exist, redirect to Mendeley login")
-		beginAuthorizationCodeFlow(w, req)
-		return
-	}
-
-	if s.accessToken == "" {
-		log.Print("Auth flow not completed, redirect to Mendeley login")
-		beginAuthorizationCodeFlow(w, req)
-		return
-	}
-
-	fmt.Fprint(w, "Hello World")
-	log.Print("Successfully logged with accessToken: ", s.accessToken)
+	writeHTML(w, struct {
+		session *Session
+	}{s})
 }
 
 func beginAuthorizationCodeFlow(w http.ResponseWriter, req *http.Request) {
@@ -190,29 +186,11 @@ func redirectToMendeleyLogin(w http.ResponseWriter, req *http.Request) (state st
 	return
 }
 
-func createSession(w http.ResponseWriter) *session {
-	newSession := &session{uuid.NewV4(), "", map[string]interface{}{}}
-	sessionMap[newSession.id] = newSession
-
-	sessionCookie := http.Cookie{
-		Name:     "_session",
-		Value:    url.QueryEscape(newSession.id.String()),
-		HttpOnly: true,
+func writeHTML(w http.ResponseWriter, data interface{}) {
+	err := templates.ExecuteTemplate(w, "layout.html", nil)
+	if err != nil {
+		log.Println("Template can't be executed:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	http.SetCookie(w, &sessionCookie)
-
-	log.Printf("NewSession: %v\n", newSession.id)
-
-	return newSession
-}
-
-// Represent web session
-type session struct {
-	id          uuid.UUID
-	accessToken string
-	properties  map[string]interface{}
-}
-
-func (s *session) String() string {
-	return fmt.Sprintf("{ id: %v, state: %v }", s.id, s.properties["state"])
 }
