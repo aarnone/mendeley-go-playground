@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -83,11 +85,11 @@ func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	code := req.PostFormValue("code")
+	code := req.FormValue("code")
 	log.Printf("Code received %v. Auth flow to be completed", code)
 
 	postData := url.Values{}
-	postData.Set("grant_type", "token")
+	postData.Set("grant_type", "authorization_code")
 	postData.Set("code", code)
 	postData.Set("redirect_uri", *redirectURI)
 
@@ -96,6 +98,7 @@ func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
 		panic(fmt.Errorf("Impossibile to build the auth request: %v", err))
 	}
 	authRequest.SetBasicAuth(*clientID, *clientSecret)
+	authRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	authResponse, err := http.DefaultClient.Do(authRequest)
 	if err != nil {
@@ -104,7 +107,8 @@ func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
 	defer authResponse.Body.Close()
 
 	if authResponse.StatusCode != http.StatusOK {
-		panic(fmt.Errorf("Impossibile to execute the auth request: %v", err))
+		b, _ := ioutil.ReadAll(authResponse.Body)
+		panic(fmt.Errorf("Impossibile to execute the auth request: %v: %v", authResponse.StatusCode, string(b)))
 	}
 
 	var authBody struct {
@@ -114,7 +118,10 @@ func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
 		TokenType    string `json:"token_type"`
 	}
 
-	delete(sessionMap, s.id)
+	json.NewDecoder(authResponse.Body).Decode(&authBody)
+
+	s.accessToken = authBody.AccessToken
+
 	http.Redirect(w, req, "/", http.StatusFound)
 }
 
@@ -150,9 +157,8 @@ func homeHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Println(s)
-
 	fmt.Fprint(w, "Hello World")
+	log.Print("Successfully logged with accessToken: ", s.accessToken)
 }
 
 func beginAuthorizationCodeFlow(w http.ResponseWriter, req *http.Request) {
