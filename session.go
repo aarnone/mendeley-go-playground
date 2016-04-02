@@ -12,8 +12,9 @@ import (
 // Session (in-memory)
 var sessionMap = map[uuid.UUID]*Session{}
 
-func retrieveOrCreateSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
+var errSessionNotPresent = fmt.Errorf("No session found")
 
+func retrieveSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
 	sessCookie, err := r.Cookie("_session")
 	if err == http.ErrNoCookie {
 		// new session
@@ -37,13 +38,22 @@ func retrieveOrCreateSession(w http.ResponseWriter, r *http.Request) (*Session, 
 
 	ses, ok := sessionMap[sessionID]
 	if !ok {
+		return nil, errSessionNotPresent
+	}
+
+	return ses, nil
+}
+
+func retrieveOrCreateSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
+	ses, err := retrieveSession(w, r)
+	if err == errSessionNotPresent {
 		ses := createSession(w)
 		log.Println("Session doesn't exist, create a new one", ses.id)
 
 		return ses, nil
 	}
 
-	return ses, nil
+	return ses, err
 }
 
 func createSession(w http.ResponseWriter) *Session {

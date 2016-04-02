@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/satori/go.uuid"
 )
 
 // Flags
@@ -43,8 +42,10 @@ func main() {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/", homeHandler).Methods("GET")
+	r.HandleFunc("/login", loginHandler)
+	r.HandleFunc("/logout", logoutHandler)
+
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("static")))
-	r.HandleFunc("/login", loginCallbackHandler)
 
 	log.Println("Started with PID", os.Getpid())
 
@@ -63,46 +64,52 @@ func validateArgs() {
 	}
 }
 
-func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
-	log.Printf("GET: %v", req.URL)
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("GET: %v", r.URL)
 
-	sessCookie, err := req.Cookie("_session")
+	session, err := retrieveSession(w, r)
+	if err == errSessionNotPresent {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	delete(sessionMap, session.id)
+	http.Redirect(w, r, "/", http.StatusFound)
+	return
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("GET: %v", r.URL)
+	session, err := retrieveOrCreateSession(w, r)
 	if err != nil {
-		// no session cookie
-		log.Print("Auth code received, but no session found")
-		http.Redirect(w, req, "/", http.StatusFound)
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	sessCookieVal, _ := url.QueryUnescape(sessCookie.Value)
-	sessionID, err := uuid.FromString(sessCookieVal)
-	if err != nil {
-		// session cookie not valid
-		log.Print("Auth code received, but session cookie not valid")
-		http.Redirect(w, req, "/", http.StatusFound)
+	if _, ok := session.properties["state"]; ok {
+		// redirect from mendeley login
+		redeemAuthCode(w, r, session)
+	} else {
+		// redirect to mendeley login
+		state := redirectToMendeleyLogin(w, r)
+		session.properties["state"] = state
+	}
+
+	return
+}
+
+func redeemAuthCode(w http.ResponseWriter, r *http.Request, session *Session) {
+	r.ParseForm()
+	state := r.FormValue("state")
+	if session.properties["state"] != state {
+		log.Printf("Auth code received, but state doesn't match %v != %v", (*session).properties["state"], state)
+		delete(sessionMap, session.id)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
-	s, ok := sessionMap[sessionID]
-	if !ok {
-		// session not found
-		log.Print("Auth code received, but session not found")
-		http.Redirect(w, req, "/", http.StatusFound)
-		return
-	}
-
-	log.Print("Session found: ", s)
-
-	req.ParseForm()
-	state := req.FormValue("state")
-	if s.properties["state"] != state {
-		log.Printf("Auth code received, but state doesn't match %v != %v", (*s).properties["state"], state)
-		delete(sessionMap, s.id)
-		http.Redirect(w, req, "/", http.StatusFound)
-		return
-	}
-
-	code := req.FormValue("code")
+	code := r.FormValue("code")
 	log.Printf("Code received %v. Auth flow to be completed", code)
 
 	postData := url.Values{}
@@ -137,9 +144,9 @@ func loginCallbackHandler(w http.ResponseWriter, req *http.Request) {
 
 	json.NewDecoder(authResponse.Body).Decode(&authBody)
 
-	s.accessToken = authBody.AccessToken
+	session.accessToken = authBody.AccessToken
 
-	http.Redirect(w, req, "/", http.StatusFound)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -153,15 +160,8 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeHTML(w, struct {
-		session *Session
+		Session *Session
 	}{s})
-}
-
-func beginAuthorizationCodeFlow(w http.ResponseWriter, req *http.Request) {
-	userSession := createSession(w)
-	state := redirectToMendeleyLogin(w, req)
-
-	userSession.properties["state"] = state
 }
 
 func redirectToMendeleyLogin(w http.ResponseWriter, req *http.Request) (state string) {
@@ -187,7 +187,7 @@ func redirectToMendeleyLogin(w http.ResponseWriter, req *http.Request) (state st
 }
 
 func writeHTML(w http.ResponseWriter, data interface{}) {
-	err := templates.ExecuteTemplate(w, "layout.html", nil)
+	err := templates.ExecuteTemplate(w, "layout.html", data)
 	if err != nil {
 		log.Println("Template can't be executed:", err)
 		w.WriteHeader(http.StatusInternalServerError)
