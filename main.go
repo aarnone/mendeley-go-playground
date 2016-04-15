@@ -26,9 +26,9 @@ var templates *template.Template
 
 func init() {
 	templates = template.Must(template.ParseFiles(
-		"templates/layout.html",
+		"templates/home.html",
+		"templates/commons.html",
 		"templates/navbar.html",
-		"templates/navbar-login.html",
 	))
 
 	log.Println("Templates parse successful", templates.DefinedTemplates())
@@ -170,9 +170,9 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		s.Me = me
 	}
 
-	writeHTML(w, struct {
-		Session *Session
-	}{s})
+	writeHTML(w, "home.html", struct {
+		Me *Profile
+	}{s.Me})
 }
 
 func redirectToMendeleyLogin(w http.ResponseWriter, req *http.Request) (state string) {
@@ -197,8 +197,8 @@ func redirectToMendeleyLogin(w http.ResponseWriter, req *http.Request) (state st
 	return
 }
 
-func writeHTML(w http.ResponseWriter, data interface{}) {
-	err := templates.ExecuteTemplate(w, "layout.html", data)
+func writeHTML(w http.ResponseWriter, templateName string, data interface{}) {
+	err := templates.ExecuteTemplate(w, templateName, data)
 	if err != nil {
 		log.Println("Template can't be executed:", err)
 		w.WriteHeader(http.StatusInternalServerError)

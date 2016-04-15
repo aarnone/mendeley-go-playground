@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    {{template "header"}}
+  </head>
+  <body>
+    <div class="container">
+      {{template "navbar" .}}
+      <div class="jumbotron">
+        <h1>The Mendeley Go Playground</h1>
+        <p>Try out the Mendeley public API using <a href="http://www.golang.org">Go language</a></p>
+        <p>
+          <a class="btn btn-primary btn-lg btn-social" href="https://github.com/aarnone/mendeley-go-playground" role="button">
+            <span class="fa fa-github"></span> View on GitHub
+          </a>
+        </p>
+      </div>
+    </div>
+
+    {{template "scripts"}}
+  </body>
+</html>

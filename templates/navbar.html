@@ -12,7 +12,16 @@
     </div>
 
     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
-      {{template "navbar-login" .}}
+      <ul class="nav navbar-nav navbar-right">
+        {{if .Me}}
+        <li>
+          <p class="navbar-text">Signed in as {{.Me.DisplayName}}</p>
+        </li>
+        <li><a href="/logout">Logout</a></li>
+        {{else}}
+        <li><a href="/login">Login</a></li>
+        {{end}}
+      </ul>
     </div>
   </div>
 </nav>
