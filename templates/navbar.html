@@ -12,6 +12,13 @@
     </div>
 
     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+      <ul class="nav navbar-nav">
+        {{if .Me}}
+        <li class="{{if eq .ActivePage "profiles"}}active{{end}}">
+          <a href="/profiles">Profiles <span class="sr-only">(current)</span></a>
+        </li>
+        {{end}}
+      </ul>
       <ul class="nav navbar-nav navbar-right">
         {{if .Me}}
         <li>

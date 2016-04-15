@@ -27,6 +27,7 @@ var templates *template.Template
 func init() {
 	templates = template.Must(template.ParseFiles(
 		"templates/home.html",
+		"templates/profiles.html",
 		"templates/commons.html",
 		"templates/navbar.html",
 	))
@@ -42,6 +43,7 @@ func main() {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/", homeHandler).Methods("GET")
+	r.HandleFunc("/profiles", profilesHandler).Methods("GET")
 	r.HandleFunc("/login", loginHandler)
 	r.HandleFunc("/logout", logoutHandler)
 
@@ -171,8 +173,30 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeHTML(w, "home.html", struct {
-		Me *Profile
-	}{s.Me})
+		ActivePage string
+		Me         *Profile
+	}{"home", s.Me})
+}
+
+func profilesHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("GET: %v", r.URL)
+
+	s, err := retrieveOrCreateSession(w, r)
+	if err != nil {
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if !s.IsLogged() {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	writeHTML(w, "profiles.html", struct {
+		ActivePage string
+		Me         *Profile
+	}{"profiles", s.Me})
 }
 
 func redirectToMendeleyLogin(w http.ResponseWriter, req *http.Request) (state string) {
