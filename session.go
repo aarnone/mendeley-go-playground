@@ -57,7 +57,7 @@ func retrieveOrCreateSession(w http.ResponseWriter, r *http.Request) (*Session, 
 }
 
 func createSession(w http.ResponseWriter) *Session {
-	newSession := &Session{uuid.NewV4(), "", map[string]interface{}{}}
+	newSession := &Session{uuid.NewV4(), "", map[string]interface{}{}, nil}
 	sessionMap[newSession.id] = newSession
 
 	sessionCookie := http.Cookie{
@@ -77,6 +77,7 @@ type Session struct {
 	id          uuid.UUID
 	accessToken string
 	properties  map[string]interface{}
+	Me          *Profile
 }
 
 // IsLogged if the Session is valid and logged in

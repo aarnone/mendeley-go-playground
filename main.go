@@ -159,6 +159,17 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.IsLogged() {
+		me, err := GetMyProfile(s.accessToken)
+		if err != nil {
+			log.Println("Error retrieving the logged profile:", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		s.Me = me
+	}
+
 	writeHTML(w, struct {
 		Session *Session
 	}{s})
