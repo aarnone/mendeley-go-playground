@@ -1,11 +1,11 @@
 {{define "navbar-login"}}
 <ul class="nav navbar-nav navbar-right">
   {{if .Session.IsLogged}}
+  <li>
+    <p class="navbar-text">Signed in as {{.Session.Me.DisplayName}}</p>
+  </li>
   <li><a href="/logout">Logout</a></li>
   {{else}}
-  <li>
-    <p class="navbar-text">Signed in as Ajeje Brazorv</p>
-  </li>
   <li><a href="/login">Login</a></li>
   {{end}}
 </ul>
